@@ -34,7 +34,7 @@ set(hangul_PRIVATE_HEADERS
     hanjacompatible.h
 )
 
-add_library(hangul
+add_library(hangul STATIC
     ${hangul_PUBLIC_HEADERS}
     ${hangul_PRIVATE_HEADERS}
     hangulctype.c
