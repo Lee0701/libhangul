@@ -37,12 +37,12 @@ option(ENABLE_EXTERNAL_KEYBOARDS
 
 option(ENABLE_UNIT_TEST
     "Enable/Disable unit test."
-    ON
+    OFF
 )
 
 option(ENABLE_TOOLS
     "Enable/Disable tools."
-    ON
+    OFF
 )
 
 include(CTest)
