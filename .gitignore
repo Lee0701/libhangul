@@ -1,3 +1,7 @@
+
+build/
+vcpkg_installed/
+
 ABOUT-NLS
 ChangeLog
 INSTALL

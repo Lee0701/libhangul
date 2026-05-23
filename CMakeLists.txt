@@ -17,6 +17,8 @@
 
 cmake_minimum_required(VERSION 3.10)
 
+include( C:/vcpkg/scripts/buildsystems/vcpkg.cmake )
+
 project(libhangul
     VERSION 0.2.0
 )
