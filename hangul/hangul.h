@@ -70,6 +70,12 @@ void    hangul_syllable_to_jamo(ucschar syllable,
 int     hangul_jamos_to_syllables(ucschar* dest, int destlen,
 				  const ucschar* src, int srclen);
 
+
+// 3beol
+#ifndef libhangul_3beol
+    #define libhangul_3beol
+#endif
+
 /* hangulinputcontext.c */
 typedef struct _HangulKeyboard        HangulKeyboard;
 typedef struct _HangulCombination     HangulCombination;
@@ -84,6 +90,11 @@ enum {
 enum {
     HANGUL_KEYBOARD_TYPE_JAMO,
     HANGUL_KEYBOARD_TYPE_JASO,
+    // 3beol
+    HANGUL_KEYBOARD_TYPE_3FINALSUN,
+	HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_SHIFT,
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_YET,
     HANGUL_KEYBOARD_TYPE_ROMAJA,
     HANGUL_KEYBOARD_TYPE_JAMO_YET,
     HANGUL_KEYBOARD_TYPE_JASO_YET,
@@ -93,7 +104,46 @@ enum {
     HANGUL_IC_OPTION_AUTO_REORDER,
     HANGUL_IC_OPTION_COMBI_ON_DOUBLE_STROKE,
     HANGUL_IC_OPTION_NON_CHOSEONG_COMBI,
+    // 3beol
+	HANGUL_IC_OPTION_EXTENDED_LAYOUT,
+	HANGUL_IC_OPTION_EXTENDED_LAYOUT_INDEX,
+	HANGUL_IC_OPTION_EXTENDED_LAYOUT_PREVKey,
+	HANGUL_IC_OPTION_GALMADEULI_METHOD,
+    HANGUL_IC_OPTION_EXTENDED_LAYOUT_STEP,
 };
+
+enum {// [모음글쇠, 확장기호글쇠, 확장한글글쇠, ]
+  HANGUL_KEYBOARD_KEY_MOEUM,
+  HANGUL_KEYBOARD_KEY_SYMBOL,
+  HANGUL_KEYBOARD_KEY_YETGEUL,
+};
+enum {// [모음값, 확장기호값, 확장한글값, 확장단계기호값]
+  HANGUL_KEYBOARD_VALUE_MOEUM,
+  HANGUL_KEYBOARD_VALUE_SYMBOL,
+  HANGUL_KEYBOARD_VALUE_YETGEUL,
+  HANGUL_KEYBOARD_VALUE_EXTENDED_STEP,
+};
+
+enum {// [기호확장함수, 한글확장함수]
+  HANGUL_FUNCTION_SYMBOL,
+  HANGUL_FUNCTION_YETHANGEUL,
+};
+
+enum {// Combination // [기본조합,추가조합,갈마들이조합]
+  HANGUL_COMBINATION_DEFAULT,
+  HANGUL_COMBINATION_ADDON,
+  HANGUL_COMBINATION_GALMADEULI,
+};
+
+enum {
+    HANGUL_KEYBOARD_FLAG_EXTENDED,
+    HANGUL_KEYBOARD_FLAG_GALMADEULI,
+    HANGUL_KEYBOARD_FLAG_LOOSE_ORDER,
+    HANGUL_KEYBOARD_FLAG_RIGHT_OU,
+    HANGUL_KEYBOARD_FLAG_NO_ADDED_GGEUT,
+};
+
+
 
 /* library */
 #if ENABLE_EXTERNAL_KEYBOARDS
@@ -108,11 +158,17 @@ void    hangul_keyboard_delete(HangulKeyboard *keyboard);
 void    hangul_keyboard_set_type(HangulKeyboard *keyboard, int type);
 
 unsigned int hangul_keyboard_list_get_count();
+
 const char* hangul_keyboard_list_get_keyboard_id(unsigned index_);
 const char* hangul_keyboard_list_get_keyboard_name(unsigned index_);
 const HangulKeyboard* hangul_keyboard_list_get_keyboard(const char* id);
 const char* hangul_keyboard_list_register_keyboard(HangulKeyboard* keyboard);
 HangulKeyboard* hangul_keyboard_list_unregister_keyboard(const char* id);
+
+char** 
+libhangul_get_init_keyboard_ids (void);
+unsigned int 
+libhangul_get_init_keyboard_ids_length (void);
 
 /* combination */
 HangulCombination* hangul_combination_new(void);
@@ -124,6 +180,14 @@ bool hangul_combination_set_data(HangulCombination* combination,
 HangulInputContext* hangul_ic_new(const char* keyboard);
 void hangul_ic_delete(HangulInputContext *hic);
 bool hangul_ic_process(HangulInputContext *hic, int ascii);
+// 3beol
+bool
+hangul_ic_process_with_capslock(HangulInputContext *hic, int ascii, bool capslock);
+unsigned int
+hangul_ic_get_keyboard_flag(HangulInputContext *hic);
+void
+hangul_ic_set_keyboard_flag(HangulInputContext *hic, bool* value);
+
 void hangul_ic_reset(HangulInputContext *hic);
 bool hangul_ic_backspace(HangulInputContext *hic);
 
@@ -135,6 +199,12 @@ bool hangul_ic_is_transliteration(HangulInputContext *hic);
 
 bool hangul_ic_get_option(HangulInputContext *hic, int option);
 void hangul_ic_set_option(HangulInputContext *hic, int option, bool value);
+// 3beol
+void
+hangul_ic_set_option_int(HangulInputContext* hic, int option, int value);
+int 
+hangul_ic_get_option_int(HangulInputContext* hic, int option);
+
 void hangul_ic_set_output_mode(HangulInputContext *hic, int mode);
 void hangul_ic_set_keyboard(HangulInputContext *hic,
 			    const HangulKeyboard *keyboard);

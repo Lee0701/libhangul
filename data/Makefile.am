@@ -5,4 +5,4 @@ if ENABLE_EXTERNAL_KEYBOARDS
 endif
 
 SUBDIRS = hanja $(subdirs)
-DIST_SUBDIRS = hanja keyboards
+DIST_SUBDIRS = hanja keyboards keyboards_info

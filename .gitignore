@@ -1,3 +1,4 @@
+.vscode/*
 ABOUT-NLS
 ChangeLog
 INSTALL
@@ -35,7 +36,7 @@ po/en@quot.header
 po/insert-header.sin
 po/insert-header.sed
 po/ko.gmo
-po/libhangul.pot
+#po/libhangul.pot
 po/quot.sed
 po/remove-potcdate.sed
 po/remove-potcdate.sin

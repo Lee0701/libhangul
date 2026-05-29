@@ -24,6 +24,10 @@
 #include <string.h>
 #include <limits.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #if ENABLE_EXTERNAL_KEYBOARDS
 #include <locale.h>
 #ifdef HAVE_GLOB_H
@@ -69,6 +73,62 @@
 
 #define HANGUL_KEYBOARD_TABLE_SIZE 0x80
 
+
+
+// 세벌식 확장모드 글쇠
+//0 : 같은 기호 배열을 쓴다 // ㅗ, ㅜ
+const char sebeol_3_symbol_key[] = {'0', 'v', '8', 0x00};
+//1 : 다른 기호 배열을 쓴다// ㅗ, ㅜ 
+const char sebeol_3yet_symbol_key[] = {'1', '/', '9', 0x00};
+// J + [ K, L, : ] //2: 같은 기호배열을 쓰고 준비글쇠가 있다.
+const char sebeol_3moa_symbol_key[] = {'2', 'J', 'K', 'L', ':', 0x00};
+// j + [ k, l, ;]
+const char sebeol_3shin_symbol_key[] = {'j', 'k', 'l', ';', 0x00};
+
+// ㅗ, ㅜ
+const ucschar sebeol_3_symbol_value[] = {0x1169, 0x116e, 0x0000};  
+// 첫소리 ㅇ [J]
+const ucschar sebeol_3moa_symbol_value[] = {0x110b, 0x0000};
+// 첫소리 ㅇ [j]
+const ucschar sebeol_3shin_symbol_value[] = {0x110b, 0x0000};
+
+// 세벌식 옛한글
+  //6 : 옛글 배열,  ㅖ, ㅢ  // 공병우 계열
+const char sebeol_3yet_yetgeul_key[] = {'6', '7', '8', 0x00};
+// ㅖ, ㅢ  // 공병우 계열
+const ucschar sebeol_3yet_yetgeul_value[] = {0x1168, 0x1174, 0x0000};
+
+// 세벌식 확장단계 표시
+// ®, ①, ②, ③, ④, ⑤
+const ucschar sebeol_3_ext_step[] = {0x00AE, 0x2460, 0x2461, 0x2462, 0x2463, 0x2464, 0x0000};
+// 세벌식 겹홀소리 글쇠
+  // ㅡ,ㅗ, ㅜ  // 공병우 계열
+const char sebeol_3_moeum_key[] = {'8', '/', '9', 0x00};
+  // ㅡ, ㅗ, ㅜ  // 신광조 계열
+const char sebeol_3shin_moeum_key[] = {'I', 'O', 'P', 0x00};
+// ㅗ, ㅜ  // 신세기 계열 2018
+const char sebeol_3moa_semoe_2018_moeum_key[] = {'.', 'b', 0x00};
+ // ㅗ, ㅜ  // 신세기 계열 2017
+const char sebeol_3moa_semoe_2017_moeum_key[] = {'.', 'p', 0x00};
+ // ㅗ, ㅜ  // 신세기 계열 2016
+const char sebeol_3moa_semoe_2016_moeum_key[] = {'[', 'p', 0x00};
+ // ㅗ, ㅜ  // 신세기 계열 2014, 2015
+const char sebeol_3moa_semoe_moeum_key_deprecated[] = {'\'', 'p', 0x00};
+ // ㅗ, ㅜ  // 신세기 계열
+//char sebeol_3moa_semoe_2015_moeum_key[] = {';', 'p', 0x00};
+  // ㅗ, ㅜ, ㅡ
+const ucschar sebeol_3_moeum_value[] = {0x1169, 0x116e, 0x1173, 0x0000};
+
+#ifndef INIT_IDS_LENGTH
+#define INIT_IDS_LENGTH 9
+#endif
+static const char *keys[INIT_IDS_LENGTH] =
+            { "2", "2noshift", 
+                "3-90", "3-91", "3-p3", 
+                "3moa-semoe-2018", 
+                "3shin-2003", "3shin-p2",
+                NULL};
+
 typedef struct _HangulCombinationItem HangulCombinationItem;
 
 struct _HangulCombinationItem {
@@ -87,11 +147,24 @@ struct _HangulCombination {
 struct _HangulKeyboard {
     char* id;
     char* name;
+    // [기본배열]
     ucschar* table[4];
+    // [기본조합,추가조합,갈마들이조합]
     HangulCombination* combination[4];
 
     int type;
     bool is_static;
+    
+    // 3beol
+    ucschar replace_it; // 바꿔 놓기 : 세벌식의 ] -> 아래아
+    // 확장배열씀, 갈마들이켜끄기됨, 입력순서〈안〉따짐, 왼/오른ㅗㅜ구분함, 확장겹받침허용〈안〉함
+    bool flag[5]; //
+    // [모음글쇠, 확장기호글쇠, 확장한글글쇠, ]
+    char* addon_key[4];
+    // [모음값, 확장기호값, 확장한글값, 확장단계기호값]
+    ucschar* addon_value[4];
+    // [기호확장함수, 한글확장함수]
+    ucschar (*addon_func[2])(int, int, int);
 };
 
 typedef struct _HangulKeyboardList {
@@ -102,11 +175,19 @@ typedef struct _HangulKeyboardList {
 
 #include "hangulkeyboard.h"
 
-static const HangulCombination hangul_combination_default = {
-    countof(hangul_combination_table_default),
-    countof(hangul_combination_table_default),
-    (HangulCombinationItem*)hangul_combination_table_default,
+
+static const HangulCombination hangul_combination_default_2 = {
+    countof(hangul_combination_table_default_2),
+    countof(hangul_combination_table_default_2),
+    (HangulCombinationItem*)hangul_combination_table_default_2,
     true
+};
+
+
+static const HangulCombination hangul_combination_default_3 = {
+    countof(hangul_combination_table_default_3),
+    countof(hangul_combination_table_default_3),
+    (HangulCombinationItem*)hangul_combination_table_default_3
 };
 
 static const HangulCombination hangul_combination_romaja = {
@@ -130,13 +211,222 @@ static const HangulCombination hangul_combination_ahn = {
     true
 };
 
+static const HangulCombination hangul_combination_3_91_noshift = {
+    countof(hangul_combination_table_3_91_noshift),
+    countof(hangul_combination_table_3_91_noshift),
+    (HangulCombinationItem*)hangul_combination_table_3_91_noshift,
+    true
+};
+
+static const HangulCombination hangul_combination_3_2015 = {
+    countof(hangul_combination_table_3_3_2015),
+    countof(hangul_combination_table_3_3_2015),
+    (HangulCombinationItem*)hangul_combination_table_3_3_2015,
+    true
+};
+
+static const HangulCombination hangul_combination_3_2015_yet = {
+    countof(hangul_combination_table_full_3_2015_yet),
+    countof(hangul_combination_table_full_3_2015_yet),
+    (HangulCombinationItem*)hangul_combination_table_full_3_2015_yet,
+    true
+};
+
+static const HangulCombination hangul_combination_3_14_proposal = {
+    countof(hangul_combination_table_3_3_14_proposal),
+    countof(hangul_combination_table_3_3_14_proposal),
+    (HangulCombinationItem*)hangul_combination_table_3_3_14_proposal,
+    true
+};
+
+static const HangulCombination hangul_combination_3sun_2014 = {
+    countof(hangul_combination_table_3_3sun_2014),
+    countof(hangul_combination_table_3_3sun_2014),
+    (HangulCombinationItem*)hangul_combination_table_3_3sun_2014,
+    true
+};
+
+static const HangulCombination hangul_combination_3gimguk_38a_yet = {
+    countof(hangul_combination_table_full_3gimguk_38A_yet),
+    countof(hangul_combination_table_full_3gimguk_38A_yet),
+    (HangulCombinationItem*)hangul_combination_table_full_3gimguk_38A_yet,
+    true
+};
+
+static const HangulCombination hangul_combination_3moa_semoe_2014 = {
+    countof(hangul_combination_table_3moa_semoe_2014),
+    countof(hangul_combination_table_3moa_semoe_2014),
+    (HangulCombinationItem*)hangul_combination_table_3moa_semoe_2014,
+    true
+};
+
+static const HangulCombination hangul_combination_3moa_semoe_2015 = {
+    countof(hangul_combination_table_3moa_semoe_2015),
+    countof(hangul_combination_table_3moa_semoe_2015),
+    (HangulCombinationItem*)hangul_combination_table_3moa_semoe_2015,
+    true
+};
+
+static const HangulCombination hangul_combination_3moa_semoe_2016 = {
+    countof(hangul_combination_table_3moa_semoe_2016),
+    countof(hangul_combination_table_3moa_semoe_2016),
+    (HangulCombinationItem*)hangul_combination_table_3moa_semoe_2016,
+    true
+};
+
+static const HangulCombination hangul_combination_3moa_semoe_2017 = {
+    countof(hangul_combination_table_3moa_semoe_2017),
+    countof(hangul_combination_table_3moa_semoe_2017),
+    (HangulCombinationItem*)hangul_combination_table_3moa_semoe_2017,
+    true
+};
+
+static const HangulCombination hangul_combination_3moa_semoe_2018 = {
+    countof(hangul_combination_table_3moa_semoe_2018),
+    countof(hangul_combination_table_3moa_semoe_2018),
+    (HangulCombinationItem*)hangul_combination_table_3moa_semoe_2018,
+    true
+};
+
+static const HangulCombination hangul_replace_2_noshift = {
+    countof(hangul_replace_table_2_noshift),
+    countof(hangul_replace_table_2_noshift),
+    (HangulCombinationItem*)hangul_replace_table_2_noshift,
+    true
+};
+
+static const HangulCombination hangul_combination_3shin_2015 = {
+    countof(hangul_combination_table_3_3shin_2015),
+    countof(hangul_combination_table_3_3shin_2015),
+    (HangulCombinationItem*)hangul_combination_table_3_3shin_2015,
+    true
+};
+
+static const HangulCombination hangul_combination_3shin_p_yet = {
+    countof(hangul_combination_table_full_3shin_p),
+    countof(hangul_combination_table_full_3shin_p),
+    (HangulCombinationItem*)hangul_combination_table_full_3shin_p,
+    true
+};
+
+static const HangulCombination hangul_combination_3shin_p2_yet = {
+    countof(hangul_combination_table_full_3shin_p),
+    countof(hangul_combination_table_full_3shin_p),
+    (HangulCombinationItem*)hangul_combination_table_full_3shin_p,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_2014 = {
+    countof(hangul_galmadeuli_table_3_2014),
+    countof(hangul_galmadeuli_table_3_2014),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_2014,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_2015 = {
+    countof(hangul_galmadeuli_table_3_2015),
+    countof(hangul_galmadeuli_table_3_2015),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_2015,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_2015_metal = {
+    countof(hangul_galmadeuli_table_3_2015_metal),
+    countof(hangul_galmadeuli_table_3_2015_metal),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_2015_metal,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_2015_patal = {
+    countof(hangul_galmadeuli_table_3_2015_patal),
+    countof(hangul_galmadeuli_table_3_2015_patal),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_2015_patal,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_p3 = {
+    countof(hangul_galmadeuli_table_3_p3),
+    countof(hangul_galmadeuli_table_3_p3),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_p3,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3_14_proposal = {
+    countof(hangul_galmadeuli_table_3_14_proposal),
+    countof(hangul_galmadeuli_table_3_14_proposal),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3_14_proposal,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_1995 = {
+    countof(hangul_galmadeuli_table_3shin_1995),
+    countof(hangul_galmadeuli_table_3shin_1995),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_1995,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_2003 = {
+    countof(hangul_galmadeuli_table_3shin_2003),
+    countof(hangul_galmadeuli_table_3shin_2003),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_2003,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_2012 = {
+    countof(hangul_galmadeuli_table_3shin_2012),
+    countof(hangul_galmadeuli_table_3shin_2012),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_2012,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_2015 = {
+    countof(hangul_galmadeuli_table_3shin_2015),
+    countof(hangul_galmadeuli_table_3shin_2015),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_2015,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_m = {
+    countof(hangul_galmadeuli_table_3shin_m),
+    countof(hangul_galmadeuli_table_3shin_m),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_m,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_p = {
+    countof(hangul_galmadeuli_table_3shin_p),
+    countof(hangul_galmadeuli_table_3shin_p),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_p,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3shin_p2 = {
+    countof(hangul_galmadeuli_table_3shin_p2),
+    countof(hangul_galmadeuli_table_3shin_p2),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3shin_p2,
+    true
+};
+
+static const HangulCombination hangul_galmadeuli_3moa_semoe_2018 = {
+    countof(hangul_galmadeuli_table_3moa_semoe_2018),
+    countof(hangul_galmadeuli_table_3moa_semoe_2018),
+    (HangulCombinationItem*)hangul_galmadeuli_table_3moa_semoe_2018,
+    true
+};
+
+
 static const HangulKeyboard hangul_keyboard_2 = {
     (char*)"2",
-    (char*)N_("Dubeolsik"),
+    (char*)N_("Dubeolsik KSX 5002"),
     { (ucschar*)hangul_keyboard_table_2, NULL, NULL, NULL },
-    { (HangulCombination*)&hangul_combination_default, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_2, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JAMO,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
 static const HangulKeyboard hangul_keyboard_2y = {
@@ -145,52 +435,82 @@ static const HangulKeyboard hangul_keyboard_2y = {
     { (ucschar*)hangul_keyboard_table_2y, NULL, NULL, NULL },
     { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JAMO_YET,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
 static const HangulKeyboard hangul_keyboard_32 = {
     (char*)"32",
     (char*)N_("Sebeolsik Dubeol Layout"),
     { (ucschar*)hangul_keyboard_table_32, NULL, NULL, NULL },
-    { (HangulCombination*)&hangul_combination_default, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_2, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
-static const HangulKeyboard hangul_keyboard_390 = {
-    (char*)"39",
-    (char*)N_("Sebeolsik 390"),
+static const HangulKeyboard hangul_keyboard_3_90 = {
+    (char*)"3-90",
+    (char*)N_("Sebeolsik 3-90"),
     { (ucschar*)hangul_keyboard_table_390, NULL, NULL, NULL },
-    { (HangulCombination*)&hangul_combination_default, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO,
-    true
+    true,
+    0x119e,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
-static const HangulKeyboard hangul_keyboard_3final = {
-    (char*)"3f",
-    (char*)N_("Sebeolsik Final"),
+static const HangulKeyboard hangul_keyboard_3_91_final = {
+    (char*)"3-91",
+    (char*)N_("Sebeolsik 3-91 Final"),
     { (ucschar*)hangul_keyboard_table_3final, NULL, NULL, NULL },
-    { (HangulCombination*)&hangul_combination_default, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO,
-    true
+    true,
+    0x119e,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
-static const HangulKeyboard hangul_keyboard_3sun = {
-    (char*)"3s",
-    (char*)N_("Sebeolsik Noshift"),
+static const HangulKeyboard hangul_keyboard_3sun_1990 = {
+    (char*)"3sun-1990",
+    (char*)N_("Sebeolsik Noshift 1990"),
     { (ucschar*)hangul_keyboard_table_3sun, NULL, NULL, NULL },
-    { (HangulCombination*)&hangul_combination_default, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
-static const HangulKeyboard hangul_keyboard_3yet = {
-    (char*)"3y",
-    (char*)N_("Sebeolsik Yetgeul"),
+static const HangulKeyboard hangul_keyboard_3_93_yet = {
+    (char*)"3-93-yet",
+    (char*)N_("Sebeolsik 3-93 Yetgeul"),
     { (ucschar*)hangul_keyboard_table_3yet, NULL, NULL, NULL },
     { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO_YET,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
 static const HangulKeyboard hangul_keyboard_romaja = {
@@ -199,7 +519,12 @@ static const HangulKeyboard hangul_keyboard_romaja = {
     { (ucschar*)hangul_keyboard_table_romaja, NULL, NULL, NULL },
     { (HangulCombination*)&hangul_combination_romaja, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_ROMAJA,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
 static const HangulKeyboard hangul_keyboard_ahn = {
@@ -208,19 +533,667 @@ static const HangulKeyboard hangul_keyboard_ahn = {
     { (ucschar*)hangul_keyboard_table_ahn, NULL, NULL, NULL },
     { (HangulCombination*)&hangul_combination_ahn, NULL, NULL, NULL },
     HANGUL_KEYBOARD_TYPE_JASO,
-    true
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
 };
 
+// 3beol
+static const HangulKeyboard hangul_keyboard_2noshift = {
+    (char*)"2noshift",
+    (char*)N_("Dubeolsik Noshift"),
+    { (ucschar*)hangul_keyboard_table_2, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_2, //기본조합
+      NULL,//추가조합
+      (HangulCombination*)&hangul_replace_2_noshift, //갈마들이조합
+      NULL
+    },
+    HANGUL_KEYBOARD_TYPE_JAMO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+
+static const HangulKeyboard hangul_keyboard_2north9256 = {
+    (char*)"2n9256",
+    (char*)N_("Dubeolsik North 9256"),
+    { (ucschar*)hangul_keyboard_table_2north9256, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_2, //기본조합
+      NULL,//추가조합
+      (HangulCombination*)&hangul_replace_2_noshift, //갈마들이조합
+      NULL
+    },
+    HANGUL_KEYBOARD_TYPE_JAMO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_89 = {
+    (char*)"3-89",
+    (char*)N_("Sebeolsik 3-89"),
+    { (ucschar*)hangul_keyboard_table_3_89, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3,//기본조합
+      NULL,//추가조합
+      NULL,//갈마들이조합
+      NULL
+    },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_91_final_noshift = {
+    (char*)"3-91-noshift",
+    (char*)N_("Sebeolsik 3-91 Final Noshift"),
+    { (ucschar*)hangul_keyboard_table_3_91_final_noshift, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3_91_noshift,//기본조합
+      NULL,//추가조합
+      NULL,//갈마들이조합
+      NULL
+    },
+    HANGUL_KEYBOARD_TYPE_3FINALSUN,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+
+static const HangulKeyboard hangul_keyboard_3_95 = {
+    (char*)"3-95",
+    (char*)N_("Sebeolsik 3-95"),
+    { (ucschar*)hangul_keyboard_table_3_95, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3ahnmatae = {
+    (char*)"3-ahn",
+    (char*)N_("Sebeolsik 3-Ahnmatae"),
+    { (ucschar*)hangul_keyboard_table_3ahnmatae, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_ahn, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2011 = {
+    (char*)"3-2011",
+    (char*)N_("Sebeolsik 3-2011"),
+    { (ucschar*)hangul_keyboard_table_3_2011, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2011, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2011_yet = {
+    (char*)"3-2011-yet",
+    (char*)N_("Sebeolsik 3-2011 Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3_2011, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_YET,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, (char*)&sebeol_3yet_yetgeul_key, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2011_yet, 
+        (ucschar(*)(int, int, int))&hangul_ascii_to_hanguel_3_yet
+    }
+};
+
+static const HangulKeyboard hangul_keyboard_3_2012 = {
+    (char*)"3-2012",
+    (char*)N_("Sebeolsik 3-2012"),
+    { (ucschar*)hangul_keyboard_table_3_2012, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2012_yet = {
+    (char*)"3-2012-yet",
+    (char*)N_("Sebeolsik 3-2012 Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3_2012, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_YET,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, (char*)&sebeol_3yet_yetgeul_key, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, 
+        (ucschar(*)(int, int, int))&hangul_ascii_to_hanguel_3_yet
+    }
+};
+
+static const HangulKeyboard hangul_keyboard_3_2014 = {
+    (char*)"3-2014",
+    (char*)N_("Sebeolsik 3-2014"),
+    { (ucschar*)hangul_keyboard_table_3_2014, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, (HangulCombination*)&hangul_galmadeuli_3_2014, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, true, false, true, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2014_yet = {
+    (char*)"3-2014-yet",
+    (char*)N_("Sebeolsik 3-2014 Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3_2014, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_YET,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, (char*)&sebeol_3yet_yetgeul_key, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, 
+        (ucschar(*)(int, int, int))&hangul_ascii_to_hanguel_3_yet
+    }
+};
+
+static const HangulKeyboard hangul_keyboard_3_2015 = {
+    (char*)"3-2015",
+    (char*)N_("Sebeolsik 3-2015"),
+    { (ucschar*)hangul_keyboard_table_3_2015, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        (HangulCombination*)&hangul_combination_3_2015, 
+        (HangulCombination*)&hangul_galmadeuli_3_2015, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, true, false, true, true},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2015_yet = {
+    (char*)"3-2015-yet",
+    (char*)N_("Sebeolsik 3-2015 Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3_2015_yet, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_full, 
+        (HangulCombination*)&hangul_combination_3_2015_yet, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2015_metal = {
+    (char*)"3-2015-metal",
+    (char*)N_("Sebeolsik 3-2015M"),
+    { (ucschar*)hangul_keyboard_table_3_2015_metal, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        (HangulCombination*)&hangul_combination_3_2015, 
+        (HangulCombination*)&hangul_galmadeuli_3_2015_metal, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, true, false, true, true},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2015_patal = {
+    (char*)"3-2015-patal",
+    (char*)N_("Sebeolsik 3-2015P"),
+    { (ucschar*)hangul_keyboard_table_3_2015_patal, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3_2015_patal, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, true, false, true, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_2015_patal_yet = {
+    (char*)"3-2015-patal-yet",
+    (char*)N_("Sebeolsik 3-2015P Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3_2015_patal, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_full, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, 
+        (ucschar(*)(int, int, int))&hangul_ascii_to_hanguel_3_yet
+    }
+};
+
+static const HangulKeyboard hangul_keyboard_3_p2 = {
+    (char*)"3-p2",
+    (char*)N_("Sebeolsik 3-P2"),
+    { (ucschar*)hangul_keyboard_table_3_p2, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, NULL, (HangulCombination*)&hangul_galmadeuli_3_p3, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, true, false, true, true},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_2012_yet, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_p3 = {
+    (char*)"3-p3",
+    (char*)N_("Sebeolsik 3-P3"),
+    { (ucschar*)hangul_keyboard_table_3_p3, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3_p3, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x119e,
+    {true, true, false, true, true},
+    {(char*)&sebeol_3_moeum_key, (char*)&sebeol_3yet_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_3_p3, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3_14_proposal = {
+    (char*)"3-14-proposal",
+    (char*)N_("Sebeolsik 3-14 Proposal"),
+    { (ucschar*)hangul_keyboard_table_3_14_proposal, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        (HangulCombination*)&hangul_combination_3_14_proposal,
+        (HangulCombination*)&hangul_galmadeuli_3_14_proposal, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, true, false, true, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3moa_semoe_2014 = {
+    (char*)"3moa-semoe-2014",
+    (char*)N_("Sebeolsik Semoe 2014"),
+    { (ucschar*)hangul_keyboard_table_3moa_semoe_2014, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3moa_semoe_2014, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, true, false, false},
+    {(char*)&sebeol_3moa_semoe_moeum_key_deprecated, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3moa_semoe_2015 = {
+    (char*)"3moa-semoe-2015",
+    (char*)N_("Sebeolsik Semoe 2015"),
+    { (ucschar*)hangul_keyboard_table_3moa_semoe_2015, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3moa_semoe_2015, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, true, false, false},
+    {(char*)&sebeol_3moa_semoe_moeum_key_deprecated, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3moa_semoe_2016 = {
+    (char*)"3moa-semoe-2016",
+    (char*)N_("Sebeolsik Semoe 2016"),
+    { (ucschar*)hangul_keyboard_table_3moa_semoe_2016, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3moa_semoe_2016, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {true, false, true, false, false},
+    {(char*)&sebeol_3moa_semoe_2016_moeum_key, (char*)&sebeol_3moa_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_semoe, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3moa_semoe_2017 = {
+    (char*)"3moa-semoe-2017",
+    (char*)N_("Sebeolsik Semoe 2017"),
+    { (ucschar*)hangul_keyboard_table_3moa_semoe_2017, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3moa_semoe_2017, NULL, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {true, false, true, false, false},
+    {(char*)&sebeol_3moa_semoe_2017_moeum_key, (char*)&sebeol_3moa_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_semoe, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3moa_semoe_2018 = {
+    (char*)"3moa-semoe-2018",
+    (char*)N_("Sebeolsik Semoe 2018"),
+    { (ucschar*)hangul_keyboard_table_3moa_semoe_2018, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_3moa_semoe_2018, 
+        (HangulCombination*)&hangul_galmadeuli_3moa_semoe_2018, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {true, false, true, false, false},
+    {(char*)&sebeol_3moa_semoe_2018_moeum_key, (char*)&sebeol_3moa_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_semoe, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3sun_2014 = {
+    (char*)"3sun-2014",
+    (char*)N_("Sebeolsik Noshift 2014"),
+    { (ucschar*)hangul_keyboard_table_3sun_2014, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        (HangulCombination*)&hangul_combination_3sun_2014, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {(char*)&sebeol_3_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3gimguk_38a_yet = {
+    (char*)"3gimguk-38a-yet",
+    (char*)N_("Sebeolsik 3Gimguk-38A Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3gimguk_38A_yet, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_full, 
+        (HangulCombination*)&hangul_combination_3gimguk_38a_yet, NULL, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO,
+    true,
+    0x0000,
+    {false, false, false, false, false},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_1995 = {
+    (char*)"3shin-1995",
+    (char*)N_("Sebeolsik Shin 1995"),
+    { (ucschar*)hangul_keyboard_table_3shin_1995, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_1995, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_2003 = {
+    (char*)"3shin-2003",
+    (char*)N_("Sebeolsik Shin 2003"),
+    { (ucschar*)hangul_keyboard_table_3shin_2003, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_2003, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_2012 = {
+    (char*)"3shin-2012",
+    (char*)N_("Sebeolsik Shin 2012"),
+    { (ucschar*)hangul_keyboard_table_3shin_2012, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_2012, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_2015 = {
+    (char*)"3shin-2015",
+    (char*)N_("Sebeolsik Shin 2015"),
+    { (ucschar*)hangul_keyboard_table_3shin_2015, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        (HangulCombination*)&hangul_combination_3shin_2015, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_2015, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_SHIFT,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_m = {
+    (char*)"3shin-m",
+    (char*)N_("Sebeolsik Shin M"),
+    { (ucschar*)hangul_keyboard_table_3shin_m, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_m, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_SHIFT,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, NULL, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, NULL, NULL, NULL},
+    {NULL, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_p = {
+    (char*)"3shin-p",
+    (char*)N_("Sebeolsik Shin P"),
+    { (ucschar*)hangul_keyboard_table_3shin_p, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_default_3, 
+        NULL, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_p, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    true,
+    0x0000,
+    {true, false, false, true, true},
+    {(char*)&sebeol_3shin_moeum_key, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_p_yet = {
+    (char*)"3shin-p-yet",
+    (char*)N_("Sebeolsik Shin P Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3shin_p, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_full, 
+        (HangulCombination*)&hangul_combination_3shin_p_yet, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_p, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_YET,
+    true,
+    0x0000,
+    {true, false, false, true, true},
+    {NULL, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_p2 = {
+    (char*)"3shin-p2",
+    (char*)N_("Sebeolsik Shin P2"),
+    { (ucschar*)hangul_keyboard_table_3shin_p2, NULL, NULL, NULL },
+    { (HangulCombination*)&hangul_combination_default_3, //기본조합
+      NULL,//추가조합
+      (HangulCombination*)&hangul_galmadeuli_3shin_p2, //갈마들이조합
+      NULL
+    },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN,
+    true ,
+  // replace_it // FALSE
+  0x0000,
+  // 확장배열씀, 갈마들이켜끄기됨, 입력순서〈안〉따짐, 왼/오른ㅗㅜ구분함, 확장겹받침허용〈안〉함
+  // flag // 갈마들이는 필수 기능이라 꺼지면 안된다
+  {true, false, false, true, true},
+  //moeum_key, symbol_key, yetgeul_key
+  { NULL, (char*)&sebeol_3shin_symbol_key, NULL, NULL },
+  //moeum_value, symbol_value, yetgeul_value, ext_step_value
+  { (ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step },
+  //(*symbolFunc)(int, int, int), (*yetgeulFunc)(int, int, int)
+  { (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL }
+};
+
+static const HangulKeyboard hangul_keyboard_3shin_p2_yet = {
+    (char*)"3shin-p2-yet",
+    (char*)N_("Sebeolsik Shin P2 Yetgeul"),
+    { (ucschar*)hangul_keyboard_table_3shin_p2, NULL, NULL, NULL },
+    { 
+        (HangulCombination*)&hangul_combination_full, 
+        (HangulCombination*)&hangul_combination_3shin_p2_yet, 
+        (HangulCombination*)&hangul_galmadeuli_3shin_p2, NULL },
+    HANGUL_KEYBOARD_TYPE_JASO_SHIN_YET,
+    true,
+    0x0000,
+    {true, false, false, true, false},
+    {(char*)&sebeol_3shin_moeum_key, (char*)&sebeol_3shin_symbol_key, NULL, NULL},
+    {(ucschar*)&sebeol_3_moeum_value, (ucschar*)&sebeol_3shin_symbol_value, NULL, (ucschar*)&sebeol_3_ext_step},
+    {
+        (ucschar(*)(int, int, int))&hangul_ascii_to_symbol_shin, NULL}
+};
+
+
 static const HangulKeyboard* hangul_builtin_keyboards[] = {
+    // 3beol
     &hangul_keyboard_2,
+    &hangul_keyboard_2noshift,
+    &hangul_keyboard_2north9256,
+    &hangul_keyboard_3_90,
+    &hangul_keyboard_3_91_final,
+    &hangul_keyboard_3_p3,
+    &hangul_keyboard_3moa_semoe_2018,
+    &hangul_keyboard_3sun_2014,
+    &hangul_keyboard_3shin_p2,
     &hangul_keyboard_2y,
-    &hangul_keyboard_390,
-    &hangul_keyboard_3final,
-    &hangul_keyboard_3sun,
-    &hangul_keyboard_3yet,
     &hangul_keyboard_32,
     &hangul_keyboard_romaja,
     &hangul_keyboard_ahn,
+    &hangul_keyboard_3sun_1990,
+    &hangul_keyboard_3_89,
+    &hangul_keyboard_3_91_final_noshift,
+    &hangul_keyboard_3_93_yet,
+    &hangul_keyboard_3_95,
+    &hangul_keyboard_3ahnmatae,
+    &hangul_keyboard_3_2011,
+    &hangul_keyboard_3_2011_yet,
+    &hangul_keyboard_3_2012,
+    &hangul_keyboard_3_2012_yet,
+    &hangul_keyboard_3_2014,
+    &hangul_keyboard_3_2014_yet,
+    &hangul_keyboard_3_2015,
+    &hangul_keyboard_3_2015_yet,
+    &hangul_keyboard_3_2015_metal,
+    &hangul_keyboard_3_2015_patal,
+    &hangul_keyboard_3_2015_patal_yet,
+    &hangul_keyboard_3_p2,
+    &hangul_keyboard_3_14_proposal,
+    &hangul_keyboard_3moa_semoe_2014,
+    &hangul_keyboard_3moa_semoe_2015,
+    &hangul_keyboard_3moa_semoe_2016,
+    &hangul_keyboard_3moa_semoe_2017,
+    &hangul_keyboard_3gimguk_38a_yet,
+    &hangul_keyboard_3shin_1995,
+    &hangul_keyboard_3shin_2003,
+    &hangul_keyboard_3shin_2012,
+    &hangul_keyboard_3shin_2015,
+    &hangul_keyboard_3shin_m,
+    &hangul_keyboard_3shin_p,
+    &hangul_keyboard_3shin_p_yet,
+    &hangul_keyboard_3shin_p2_yet
 };
 static const unsigned int hangul_builtin_keyboard_count = countof(hangul_builtin_keyboards);
 
@@ -411,6 +1384,18 @@ hangul_keyboard_new()
     keyboard->type = HANGUL_KEYBOARD_TYPE_JAMO;
     keyboard->is_static = false;
 
+    // 3beol
+    // 바꿔 놓기 : 세벌식의 ] -> 아래아
+    keyboard->replace_it = 0x0000; 
+    // 확장배열씀, 갈마들이켜끄기됨, 입력순서〈안〉따짐, 왼/오른ㅗㅜ구분함, 확장겹받침허용〈안〉함
+    bool flag[5] = {false, false, false, false, false}; //
+    // [모음글쇠, 확장기호글쇠, 확장한글글쇠, ]
+    char* addon_key[4] = {NULL, NULL, NULL, NULL};
+    // [모음값, 확장기호값, 확장한글값, 확장단계기호값]
+    ucschar* addon_value[4] = {NULL, NULL, NULL, NULL};
+    // [기호확장함수, 한글확장함수]
+    ucschar (*addon_func[2])(int, int, int) = {NULL, NULL};
+
     return keyboard;
 }
 
@@ -541,7 +1526,7 @@ hangul_keyboard_delete(HangulKeyboard *keyboard)
 
 ucschar
 hangul_keyboard_combine(const HangulKeyboard* keyboard,
-	unsigned id, ucschar first, ucschar second)
+	unsigned int id, ucschar first, ucschar second)
 {
     if (keyboard == NULL)
 	return 0;
@@ -550,6 +1535,18 @@ hangul_keyboard_combine(const HangulKeyboard* keyboard,
 	return 0;
 
     HangulCombination* combination = keyboard->combination[id];
+    
+    if (hangul_keyboard_get_flag(keyboard, HANGUL_KEYBOARD_FLAG_LOOSE_ORDER))
+    {
+        // 입력순서를 따지지 않을 때, 작은 값을 앞에 둔다.
+        ucschar temp = first;
+        if (first > second)
+        {
+            first = second;
+            second = temp;
+        }
+    }
+    
     ucschar res = hangul_combination_combine(combination, first, second);
     return res;
 }
@@ -608,6 +1605,8 @@ on_element_start(void* data, const XML_Char* element, const XML_Char** attr)
 	    type = HANGUL_KEYBOARD_TYPE_JASO_YET;
 	} else if (strcmp(typestr, "romaja") == 0) {
 	    type = HANGUL_KEYBOARD_TYPE_ROMAJA;
+	} else if (strcmp(typestr, "shin") == 0) {
+	    type = HANGUL_KEYBOARD_TYPE_JASO_SHIN;
 	}
 
 	hangul_keyboard_set_type(context->keyboard, type);
@@ -1042,7 +2041,7 @@ hangul_keyboard_list_fini()
 }
 
 static char*
-hangul_builtin_keyboard_list_get_keyboard_id(unsigned index_)
+hangul_builtin_keyboard_list_get_keyboard_id(unsigned int index_)
 {
     if (index_ >= hangul_builtin_keyboard_count)
 	return NULL;
@@ -1055,7 +2054,7 @@ hangul_builtin_keyboard_list_get_keyboard_id(unsigned index_)
 }
 
 static const char*
-hangul_builtin_keyboard_list_get_keyboard_name(unsigned index_)
+hangul_builtin_keyboard_list_get_keyboard_name(unsigned int index_)
 {
 #ifdef ENABLE_NLS
     static bool isGettextInitialized = false;
@@ -1116,7 +2115,7 @@ hangul_keyboard_list_get_count()
  *         free해서는 안된다.
  */
 const char*
-hangul_keyboard_list_get_keyboard_id(unsigned index_)
+hangul_keyboard_list_get_keyboard_id(unsigned int index_)
 {
     if (index_ < hangul_builtin_keyboard_count) {
         return hangul_builtin_keyboard_list_get_keyboard_id(index_);
@@ -1143,7 +2142,7 @@ hangul_keyboard_list_get_keyboard_id(unsigned index_)
  *         free해서는 안된다.
  */
 const char*
-hangul_keyboard_list_get_keyboard_name(unsigned index_)
+hangul_keyboard_list_get_keyboard_name(unsigned int index_)
 {
     if (index_ < hangul_builtin_keyboard_count) {
         return hangul_builtin_keyboard_list_get_keyboard_name(index_);
@@ -1266,3 +2265,140 @@ hangul_keyboard_list_unregister_keyboard(const char* id)
 
     return keyboard;
 }
+
+
+
+
+// 3beol
+#ifndef libhangul_hangulkeyboard_addon_c
+#define libhangul_hangulkeyboard_addon_c
+ucschar
+hangul_keyboard_get_replace_it(const HangulKeyboard* keyboard)
+{
+    return keyboard->replace_it;
+}
+
+
+char*
+hangul_keyboard_get_addon_key(const HangulKeyboard* keyboard, unsigned int index) 
+{
+    return keyboard->addon_key[index];
+}
+
+ucschar*
+hangul_keyboard_get_addon_value(const HangulKeyboard* keyboard, unsigned int index)
+{
+    return keyboard->addon_value[index];
+}
+
+//ucschar (*addon_func[2])(int, int, int);
+ucschar
+(*hangul_keyboard_get_addon_func(const HangulKeyboard* keyboard, unsigned int index))(int, int, int)
+{
+    return keyboard->addon_func[index];
+}
+
+
+bool
+hangul_keyboard_is_right_oua(const HangulKeyboard *keyboard, int ascii, ucschar ch, int index)
+{
+  if (keyboard == NULL) {
+    return false;
+  }
+  if (keyboard->addon_key[index] == NULL) {
+    return false;
+  }
+
+  int i;
+  for (i = 0; *(keyboard->addon_key[index] + i) != 0x00; i++) {
+    if (ascii == *(keyboard->addon_key[index] + i)) {
+      for (i = 0; *(keyboard->addon_value[index] + i) != 0x0000; i++) {
+        if (ch == *(keyboard->addon_value[index] + i)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+
+int
+hangul_keyboard_is_extension_key(const HangulKeyboard *keyboard, int ascii, int index)
+{
+  if (keyboard == NULL) 
+  {
+    return 0;
+  }
+  if (keyboard->addon_key[index] == NULL) 
+  {
+    return 0;
+  }
+
+
+  int i;
+  for (i = 1; *(keyboard->addon_key[index] + i) != 0x00; i++) 
+  {
+    if (ascii == *(keyboard->addon_key[index] + i)) 
+    {
+      if (*(keyboard->addon_key[index] + 0) == '1') 
+      {
+        i += 10;
+      }
+      else if (*(keyboard->addon_key[index] + 0) == '2') 
+      {
+        i += 20;
+      }
+      else if (*(keyboard->addon_key[index] + 0) == '6') 
+      {
+        // 옛글 배열.
+        return i;
+      }
+      else  
+      {
+      }
+      return i;
+    }
+  }
+
+  return 0;
+}
+
+
+bool
+hangul_keyboard_get_flag(const HangulKeyboard *keyboard, unsigned int option)
+{
+    if (keyboard == NULL) 
+    {
+        return false;
+    }
+
+    switch(option)
+    {
+    case HANGUL_KEYBOARD_FLAG_EXTENDED:
+    case HANGUL_KEYBOARD_FLAG_GALMADEULI:
+    case HANGUL_KEYBOARD_FLAG_LOOSE_ORDER:
+    case HANGUL_KEYBOARD_FLAG_RIGHT_OU:
+    case HANGUL_KEYBOARD_FLAG_NO_ADDED_GGEUT:
+        return keyboard->flag[option];
+    }
+
+    return false;
+}
+
+unsigned int 
+libhangul_get_init_keyboard_ids_length ()
+{
+    return INIT_IDS_LENGTH - 1;
+}
+
+char** 
+libhangul_get_init_keyboard_ids ()
+{
+    return (char **)keys;
+}
+
+
+
+#endif /* libhangul_hangulkeyboard_addon_c */
+
